@@ -1,0 +1,8 @@
+[package]
+name = "tynavi"
+version = "0.1.0"
+edition = "2024"
+authors = ["Ecamika <index@ecamika.dev>"]
+license = "MIT"
+
+[dependencies]
