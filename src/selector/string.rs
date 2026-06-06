@@ -121,42 +121,6 @@ impl<'a, P: SelectorInstance> Selector<'a, &str, P> {
 		}
 	}
 
-	pub fn eq(&self, v: &str) -> Self {
-		if let Some(cursor) = self.cursor
-			&& *cursor != v
-		{
-			self.unmatch()
-		} else {
-			self.snapshot()
-		}
-	}
-
-	pub fn not_eq(&self, v: &str) -> Self {
-		if let Some(cursor) = self.cursor
-			&& *cursor == v
-		{
-			self.unmatch()
-		} else {
-			self.snapshot()
-		}
-	}
-
-	pub fn cond_eq(&self, condition: bool, v: &str) -> Self {
-		if condition {
-			self.eq(v)
-		} else {
-			self.snapshot()
-		}
-	}
-
-	pub fn cond_not_eq(&self, condition: bool, v: &str) -> Self {
-		if condition {
-			self.not_eq(v)
-		} else {
-			self.snapshot()
-		}
-	}
-
 	pub fn empty(&self) -> Self {
 		if let Some(cursor) = self.cursor
 			&& !cursor.is_empty()
@@ -343,42 +307,6 @@ impl<'a, P: SelectorInstance> Selector<'a, String, P> {
 	pub fn cond_not_contains(&self, condition: bool, pat: &str) -> Self {
 		if condition {
 			self.not_contains(pat)
-		} else {
-			self.snapshot()
-		}
-	}
-
-	pub fn eq(&self, v: &str) -> Self {
-		if let Some(cursor) = self.cursor
-			&& *cursor != v
-		{
-			self.unmatch()
-		} else {
-			self.snapshot()
-		}
-	}
-
-	pub fn not_eq(&self, v: &str) -> Self {
-		if let Some(cursor) = self.cursor
-			&& *cursor == v
-		{
-			self.unmatch()
-		} else {
-			self.snapshot()
-		}
-	}
-
-	pub fn cond_eq(&self, condition: bool, v: &str) -> Self {
-		if condition {
-			self.eq(v)
-		} else {
-			self.snapshot()
-		}
-	}
-
-	pub fn cond_not_eq(&self, condition: bool, v: &str) -> Self {
-		if condition {
-			self.not_eq(v)
 		} else {
 			self.snapshot()
 		}

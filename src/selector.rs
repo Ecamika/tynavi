@@ -6,6 +6,7 @@ pub mod option;
 pub mod ptr;
 pub mod result;
 pub mod string;
+pub mod traits;
 
 pub struct Selector<'a, Current, Parent: SelectorInstance> {
 	/// 游标
@@ -240,6 +241,48 @@ impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
 			self.inspect_cursor_async(f).await
 		} else {
 			self.snapshot()
+		}
+	}
+}
+
+impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
+	pub fn or_a_parent_a<T: SelectorInstance>(&self, selb: Selector<'a, C, T>) -> Selector<'a, C, P> {
+		let a_cursor = self.cursor;
+		let b_cursor = selb.cursor;
+		let cursor = a_cursor.or(b_cursor);
+		Selector {
+			cursor,
+			parent: self.parent,
+		}
+	}
+
+	pub fn or_a_parent_b<T: SelectorInstance>(&self, selb: Selector<'a, C, T>) -> Selector<'a, C, T> {
+		let a_cursor = self.cursor;
+		let b_cursor = selb.cursor;
+		let cursor = a_cursor.or(b_cursor);
+		Selector {
+			cursor,
+			parent: selb.parent,
+		}
+	}
+
+	pub fn or_b_parent_a<T: SelectorInstance>(&self, selb: Selector<'a, C, T>) -> Selector<'a, C, P> {
+		let a_cursor = self.cursor;
+		let b_cursor = selb.cursor;
+		let cursor = b_cursor.or(a_cursor);
+		Selector {
+			cursor,
+			parent: self.parent,
+		}
+	}
+
+	pub fn or_b_parent_b<T: SelectorInstance>(&self, selb: Selector<'a, C, T>) -> Selector<'a, C, T> {
+		let a_cursor = self.cursor;
+		let b_cursor = selb.cursor;
+		let cursor = b_cursor.or(a_cursor);
+		Selector {
+			cursor,
+			parent: selb.parent,
 		}
 	}
 }
