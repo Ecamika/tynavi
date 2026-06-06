@@ -2,8 +2,10 @@ use crate::error::{SelectorNotMatched, SelectorResult};
 use crate::traits::*;
 
 pub mod number;
-pub mod string;
+pub mod option;
 pub mod ptr;
+pub mod result;
+pub mod string;
 
 pub struct Selector<'a, Current, Parent: SelectorInstance> {
 	/// 游标
@@ -27,17 +29,17 @@ impl<'a, C, P: SelectorInstance> Snapshot for Selector<'a, C, P> {
 }
 
 impl<'a, C, P: SelectorInstance> Unmatch for Selector<'a, C, P> {
-  fn unmatch(&self) -> Self {
-    self.same_parent(None)
-  }
+	fn unmatch(&self) -> Self {
+		self.same_parent(None)
+	}
 
-  fn cond_unmatch(&self, condition: bool) -> Self {
-    if condition {
-      self.unmatch()
-    } else {
-      self.snapshot()
-    }
-  }
+	fn cond_unmatch(&self, condition: bool) -> Self {
+		if condition {
+			self.unmatch()
+		} else {
+			self.snapshot()
+		}
+	}
 }
 
 impl<'b, A, B: SelectorInstance> Selector<'b, A, B> {
@@ -49,9 +51,9 @@ impl<'b, A, B: SelectorInstance> Selector<'b, A, B> {
 		Self::with(Some(current), ())
 	}
 
-  pub fn same_parent<C>(&self, cursor: Option<&'b C>) -> Selector<'b, C, B> {
-    Self::with(cursor, self.parent.snapshot())
-  }
+	pub fn same_parent<C>(&self, cursor: Option<&'b C>) -> Selector<'b, C, B> {
+		Self::with(cursor, self.parent.snapshot())
+	}
 }
 
 impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
@@ -59,166 +61,185 @@ impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
 		&self,
 		extractor: impl FnOnce(&'a C, &Self) -> Option<&'a R>,
 	) -> Selector<'a, R, Self> {
-		Self::with(self.cursor.and_then(|cursor| extractor(cursor, self)), self.snapshot())
+		Self::with(
+			self.cursor.and_then(|cursor| extractor(cursor, self)),
+			self.snapshot(),
+		)
 	}
 
 	pub fn backtrack(&self) -> P {
 		self.parent.snapshot()
 	}
 
-  pub fn up(&self) -> P {
-    if self.cursor.is_some() {
-      self.parent.snapshot()
-    } else {
-      self.parent.snapshot().unmatch()
-    }
-  }
+	pub fn up(&self) -> P {
+		if self.cursor.is_some() {
+			self.parent.snapshot()
+		} else {
+			self.parent.snapshot().unmatch()
+		}
+	}
 }
 
 impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
-  pub fn replace<T>(&self, v: &'a T) -> Selector<'a, T, P> {
-    self.same_parent(Some(v))
-  }
+	pub fn replace<T>(&self, v: &'a T) -> Selector<'a, T, P> {
+		self.same_parent(Some(v))
+	}
 
 	pub fn map<R>(&self, f: impl FnOnce(&'a C, &Self) -> &'a R) -> Selector<'a, R, P> {
 		self.same_parent(self.cursor.map(|cursor| f(cursor, self)))
 	}
 
-  pub fn require_matched(&self) -> SelectorResult<Self> {
-    if self.cursor.is_some() {
-      Ok(self.snapshot())
-    } else {
-      Err(SelectorNotMatched)
-    }
-  }
+	pub fn require_matched(&self) -> SelectorResult<Self> {
+		if self.cursor.is_some() {
+			Ok(self.snapshot())
+		} else {
+			Err(SelectorNotMatched)
+		}
+	}
 
-  pub fn filter(&self, f: impl FnOnce(&'a C, &Self) -> bool) -> Self {
-    if let Some(cursor) = self.cursor && !f(cursor, self) {
-      self.unmatch()
-    } else {
-      self.snapshot()
-    }
-  }
+	pub fn filter(&self, f: impl FnOnce(&'a C, &Self) -> bool) -> Self {
+		if let Some(cursor) = self.cursor
+			&& !f(cursor, self)
+		{
+			self.unmatch()
+		} else {
+			self.snapshot()
+		}
+	}
 
-  pub fn cond_filter(&self, condition: bool, f: impl FnOnce(&'a C, &Self) -> bool) -> Self {
-    if condition {
-      self.filter(f)
-    } else {
-      self.snapshot()
-    }
-  }
+	pub fn cond_filter(&self, condition: bool, f: impl FnOnce(&'a C, &Self) -> bool) -> Self {
+		if condition {
+			self.filter(f)
+		} else {
+			self.snapshot()
+		}
+	}
 
-  pub async fn filter_async(&self, f: impl AsyncFnOnce(&'a C, &Self) -> bool) -> Self {
-    if let Some(cursor) = self.cursor && !f(cursor, self).await {
-      self.unmatch()
-    } else {
-      self.snapshot()
-    }
-  }
+	pub async fn filter_async(&self, f: impl AsyncFnOnce(&'a C, &Self) -> bool) -> Self {
+		if let Some(cursor) = self.cursor
+			&& !f(cursor, self).await
+		{
+			self.unmatch()
+		} else {
+			self.snapshot()
+		}
+	}
 
-  pub async fn cond_filter_async(&self, condition: bool, f: impl AsyncFnOnce(&'a C, &Self) -> bool) -> Self {
-    if condition {
-      self.filter_async(f).await
-    } else {
-      self.snapshot()
-    }
-  }
+	pub async fn cond_filter_async(
+		&self,
+		condition: bool,
+		f: impl AsyncFnOnce(&'a C, &Self) -> bool,
+	) -> Self {
+		if condition {
+			self.filter_async(f).await
+		} else {
+			self.snapshot()
+		}
+	}
 }
 
 impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
-  pub fn select(&self) -> Option<&'a C> {
-    self.cursor
-  }
+	pub fn select(&self) -> Option<&'a C> {
+		self.cursor
+	}
 
-  pub fn parent(&self) -> P {
-    self.parent.snapshot()
-  }
+	pub fn parent(&self) -> P {
+		self.parent.snapshot()
+	}
 
-  pub fn is_matched(&self) -> bool {
-    self.cursor.is_some()
-  }
+	pub fn is_matched(&self) -> bool {
+		self.cursor.is_some()
+	}
 
-  pub fn extract<R>(&self, f: impl FnOnce(&'a C, &Self) -> R) -> Option<R> {
-    self.cursor.map(|cursor| f(cursor, self))
-  }
+	pub fn extract<R>(&self, f: impl FnOnce(&'a C, &Self) -> R) -> Option<R> {
+		self.cursor.map(|cursor| f(cursor, self))
+	}
 
-  pub fn cond_extract<R>(&self, condition: bool, f: impl FnOnce(&'a C, &Self) -> R) -> Option<R> {
-    if condition {
-      self.extract(f)
-    } else {
-      None
-    }
-  }
+	pub fn cond_extract<R>(&self, condition: bool, f: impl FnOnce(&'a C, &Self) -> R) -> Option<R> {
+		if condition { self.extract(f) } else { None }
+	}
 
-  pub async fn extract_async<R>(&self, f: impl AsyncFnOnce(&'a C, &Self) -> R) -> Option<R> {
-    if let Some(cursor) = self.cursor {
-      Some(f(cursor, self).await)
-    } else {
-      None
-    }
-  }
+	pub async fn extract_async<R>(&self, f: impl AsyncFnOnce(&'a C, &Self) -> R) -> Option<R> {
+		if let Some(cursor) = self.cursor {
+			Some(f(cursor, self).await)
+		} else {
+			None
+		}
+	}
 
-  pub async fn cond_extract_async<R>(&self, condition: bool, f: impl AsyncFnOnce(&'a C, &Self) -> R) -> Option<R> {
-    if condition {
-      self.extract_async(f).await
-    } else {
-      None
-    }
-  }
+	pub async fn cond_extract_async<R>(
+		&self,
+		condition: bool,
+		f: impl AsyncFnOnce(&'a C, &Self) -> R,
+	) -> Option<R> {
+		if condition {
+			self.extract_async(f).await
+		} else {
+			None
+		}
+	}
 
-  pub fn inspect(&self, f: impl FnOnce(Option<&'a C>, &Self)) -> Self {
-    f(self.cursor, self);
-    self.snapshot()
-  }
+	pub fn inspect(&self, f: impl FnOnce(Option<&'a C>, &Self)) -> Self {
+		f(self.cursor, self);
+		self.snapshot()
+	}
 
-  pub fn cond_inspect(&self, condition: bool, f: impl FnOnce(Option<&'a C>, &Self)) -> Self {
-    if condition {
-      self.inspect(f)
-    } else {
-      self.snapshot()
-    }
-  }
+	pub fn cond_inspect(&self, condition: bool, f: impl FnOnce(Option<&'a C>, &Self)) -> Self {
+		if condition {
+			self.inspect(f)
+		} else {
+			self.snapshot()
+		}
+	}
 
-  pub async fn inspect_async(&self, f: impl AsyncFnOnce(Option<&'a C>, &Self)) -> Self {
-    f(self.cursor, self).await;
-    self.snapshot()
-  }
+	pub async fn inspect_async(&self, f: impl AsyncFnOnce(Option<&'a C>, &Self)) -> Self {
+		f(self.cursor, self).await;
+		self.snapshot()
+	}
 
-  pub async fn cond_inspect_async(&self, condition: bool, f: impl AsyncFnOnce(Option<&'a C>, &Self)) -> Self {
-    if condition {
-      self.inspect_async(f).await
-    } else {
-      self.snapshot()
-    }
-  }
+	pub async fn cond_inspect_async(
+		&self,
+		condition: bool,
+		f: impl AsyncFnOnce(Option<&'a C>, &Self),
+	) -> Self {
+		if condition {
+			self.inspect_async(f).await
+		} else {
+			self.snapshot()
+		}
+	}
 
-  pub fn inspect_cursor(&self, f: impl FnOnce(&'a C, &Self)) -> Self {
-    if let Some(cursor) = self.cursor {
-      f(cursor, self)
-    }
-    self.snapshot()
-  }
+	pub fn inspect_cursor(&self, f: impl FnOnce(&'a C, &Self)) -> Self {
+		if let Some(cursor) = self.cursor {
+			f(cursor, self)
+		}
+		self.snapshot()
+	}
 
-  pub fn cond_inspect_cursor(&self, condition: bool, f: impl FnOnce(&'a C, &Self)) -> Self {
-    if condition {
-      self.inspect_cursor(f)
-    } else {
-      self.snapshot()
-    }
-  }
+	pub fn cond_inspect_cursor(&self, condition: bool, f: impl FnOnce(&'a C, &Self)) -> Self {
+		if condition {
+			self.inspect_cursor(f)
+		} else {
+			self.snapshot()
+		}
+	}
 
-  pub async fn inspect_cursor_async(&self, f: impl AsyncFnOnce(&'a C, &Self)) -> Self {
-    if let Some(cursor) = self.cursor {
-      f(cursor, self).await
-    }
-    self.snapshot()
-  }
+	pub async fn inspect_cursor_async(&self, f: impl AsyncFnOnce(&'a C, &Self)) -> Self {
+		if let Some(cursor) = self.cursor {
+			f(cursor, self).await
+		}
+		self.snapshot()
+	}
 
-  pub async fn cond_inspect_cursor_async(&self, condition: bool, f: impl AsyncFnOnce(&'a C, &Self)) -> Self {
-    if condition {
-      self.inspect_cursor_async(f).await
-    } else {
-      self.snapshot()
-    }
-  }
+	pub async fn cond_inspect_cursor_async(
+		&self,
+		condition: bool,
+		f: impl AsyncFnOnce(&'a C, &Self),
+	) -> Self {
+		if condition {
+			self.inspect_cursor_async(f).await
+		} else {
+			self.snapshot()
+		}
+	}
 }

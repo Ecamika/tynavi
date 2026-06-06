@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Ecamika <index@ecamika.dev>"]
 license = "MIT"
+description = "An immutable selector library for navigating, filtering, and backtracking through deeply nested Rust data structures."
 
 [dependencies]

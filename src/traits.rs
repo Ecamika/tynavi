@@ -5,7 +5,7 @@ pub trait Snapshot {
 }
 
 pub trait AsSelector<'a, C, P: SelectorInstance> {
-  fn as_selector(&'a self) -> Selector<'a, C, P>;
+	fn as_selector(&'a self) -> Selector<'a, C, P>;
 }
 
 impl Snapshot for () {
@@ -15,18 +15,18 @@ impl Snapshot for () {
 }
 
 pub trait Unmatch {
-  fn unmatch(&self) -> Self;
-  fn cond_unmatch(&self, condition: bool) -> Self;
+	fn unmatch(&self) -> Self;
+	fn cond_unmatch(&self, condition: bool) -> Self;
 }
 
 impl Unmatch for () {
-  fn unmatch(&self) -> Self {
-    ()
-  }
+	fn unmatch(&self) -> Self {
+		()
+	}
 
-  fn cond_unmatch(&self, _: bool) -> Self {
-    ()
-  }
+	fn cond_unmatch(&self, _: bool) -> Self {
+		()
+	}
 }
 
 pub trait SelectorInstance: Snapshot + Unmatch + Copy {}
