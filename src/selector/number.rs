@@ -11,3 +11,6 @@ pub mod u32;
 pub mod u64;
 pub mod u8;
 pub mod usize;
+
+pub mod f32;
+pub mod f64;
