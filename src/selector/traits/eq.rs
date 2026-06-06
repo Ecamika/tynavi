@@ -37,4 +37,20 @@ impl<'a, C: PartialEq, P: SelectorInstance> Selector<'a, C, P> {
 			self.snapshot()
 		}
 	}
+
+	pub fn one_of(&self, list: &[C]) -> Self {
+		self.filter(|cursor, _| list.contains(cursor))
+	}
+
+	pub fn not_one_of(&self, list: &[C]) -> Self {
+		self.filter(|cursor, _| !list.contains(cursor))
+	}
+
+	pub fn cond_one_of(&self, condition: bool, list: &[C]) -> Self {
+		self.cond_filter(condition, |cursor, _| list.contains(cursor))
+	}
+
+	pub fn cond_not_one_of(&self, condition: bool, list: &[C]) -> Self {
+		self.cond_filter(condition, |cursor, _| !list.contains(cursor))
+	}
 }

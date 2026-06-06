@@ -7,6 +7,7 @@ pub mod ptr;
 pub mod result;
 pub mod string;
 pub mod traits;
+pub mod vec;
 
 pub struct Selector<'a, Current, Parent: SelectorInstance> {
 	/// 游标

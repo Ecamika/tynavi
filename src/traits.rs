@@ -9,9 +9,7 @@ pub trait AsSelector<'a, C, P: SelectorInstance> {
 }
 
 impl Snapshot for () {
-	fn snapshot(&self) -> Self {
-		()
-	}
+	fn snapshot(&self) -> Self {}
 }
 
 pub trait Unmatch {
@@ -20,13 +18,9 @@ pub trait Unmatch {
 }
 
 impl Unmatch for () {
-	fn unmatch(&self) -> Self {
-		()
-	}
+	fn unmatch(&self) -> Self {}
 
-	fn cond_unmatch(&self, _: bool) -> Self {
-		()
-	}
+	fn cond_unmatch(&self, _: bool) -> Self {}
 }
 
 pub trait SelectorInstance: Snapshot + Unmatch + Copy {}

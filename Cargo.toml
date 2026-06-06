@@ -1,9 +1,13 @@
 [package]
 name = "tynavi"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Ecamika <index@ecamika.dev>"]
 license = "MIT"
 description = "An immutable selector library for navigating, filtering, and backtracking through deeply nested Rust data structures."
 
 [dependencies]
+tynavi-macros = { version = "0.1.0", path = "macros", optional = true }
+
+[features]
+derive = ["dep:tynavi-macros"]
