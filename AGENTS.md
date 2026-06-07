@@ -203,3 +203,124 @@ cargo test       # 运行单元测试
 - 新增过程宏：在 `macros/docs/` 下创建与宏同名的 markdown 文件（例如 `#[my_macro]` 对应 `my_macro.md`），记录其功能、用法和属性。
 - 删除过程宏：从 `macros/docs/` 中删除对应的 markdown 文件。
 - 修改宏行为或属性：更新已有 markdown 文件以反映新行为。
+
+---
+
+## Selector API 规范
+
+### 方法分类体系
+
+所有 Selector 方法分为四大类：
+
+| 类别 | 语义 | 签名特征 | 示例 |
+|------|------|---------|------|
+| **构造方法** | 创建或转换 Selector | 不依赖 cursor 是否匹配 | `new`, `with`, `same_parent`, `replace`, `map` |
+| **过滤方法** | 对 cursor 进行条件判断，不满足则 unmatch | 返回 `Self` | `filter`, `eq`, `starts_with`, `any` |
+| **路由方法** | 导航到子类型 | 返回 `Selector<'a, Child, Self>` | `route_to`, `first`, `keyof`, `ok`, `flatten` |
+| **处理方法** | 查询状态或提取值，不改变 Selector | 返回外部类型 | `select`, `is_matched`, `extract`, `inspect`, `backtrack` |
+
+### 命名规范
+
+#### 类型与文件
+- 结构体 / Trait：PascalCase（`Selector`, `SelectorNotMatched`, `Snapshot`）
+- 模块 / 文件：snake_case（`hash_map.rs`, `serde_json/`）
+- 数字类型模块：精确使用原始类型名（`i32.rs`, `usize.rs`, `f64.rs`）
+
+#### 泛型参数
+- 公开 API：语义化命名，`Current` / `C`，`Parent` / `P`，`T`，`E`，`K`，`V`，`R`
+- 宏内部：双下划线 + `Tynavi` 前缀防冲突（`__TynaviParent`, `__TynaviOutput`）
+
+#### 生命周期
+- 公开 API：`'a`，偶尔 `'b`
+- 宏生成：`'__tynavi_a`
+
+### 方法命名与变体规范
+
+#### 语义一致性原则
+
+Selector 方法命名**不应直接照搬底层容器的原始方法名**，而应体现 Selector 的导航与过滤语义。
+
+| 底层 API | Selector 语义命名 | 说明 |
+|----------|-------------------|------|
+| `Vec::get(index)` | `indexof(index)` | 按索引路由到元素，返回 `Selector<'a, T, Self>` |
+| `HashMap::get(key)` | `keyof(key)` | 按键路由到值，返回 `Selector<'a, V, Self>` |
+| `Option::unwrap()` | `flatten()` | 解包 `Option<T>` 为 `T` |
+| `Result::ok()` | `ok()` | 路由到 `Ok` 变体 |
+
+#### 变体体系（仅过滤方法适用）
+
+过滤方法的完整变体矩阵：
+
+| 变体 | 命名模式 | 适用类别 | 说明 |
+|------|---------|---------|------|
+| 基础 | `{name}` | 过滤 | 直接执行过滤 |
+| 否定 | `not_{name}` | 过滤 | 逻辑取反后过滤 |
+| 条件 | `cond_{name}` | 过滤 | `condition == false` 时短路，直接返回 `snapshot()` |
+| 条件否定 | `cond_not_{name}` | 过滤 | 条件 + 否定的组合 |
+| 异步 | `{name}_async` | 过滤 | 异步闭包版本 |
+| 条件异步 | `cond_{name}_async` | 过滤 | 条件 + 异步的组合 |
+
+**关键约束**：
+1. **路由方法不提供条件变体**。路由改变 `Current` 类型，条件短路无法通过返回 `Self` 表达，因此路由方法只有基础版本（必要时调用方可通过 `if` 分支自行控制）。
+2. **处理方法不提供条件变体**。`extract`、`inspect` 等返回外部类型，其条件语义可由调用方用 `if` 直接表达，无需冗余 API。
+3. **构造方法不提供任何变体**。
+
+#### 语义前缀 / 后缀速查
+
+| 前缀/后缀 | 语义 | 所属类别 | 示例 |
+|-----------|------|---------|------|
+| `cond_` | 条件短路 | 过滤 | `cond_eq`, `cond_filter` |
+| `not_` | 逻辑否定 | 过滤 | `not_eq`, `not_contains` |
+| `*_async` | 异步闭包 | 过滤 | `filter_async`, `any_async` |
+| `is_*` | 类型/状态检查（过滤） | 过滤 | `is_null`, `is_matched` |
+| `not_is_*` | 否定类型检查 | 过滤 | `not_is_null` |
+| `as_*` | 提取/转换（路由） | 路由 | `as_bool`, `as_ref`, `as_str` |
+| `route_*` | 导航到子字段（宏生成） | 路由 | `route_id`, `route_name` |
+| `or_a_parent_a` | 组合两 Selector 的 cursor，保留左边 parent | 过滤 | `or_a_parent_a`, `or_a_parent_b` |
+
+#### 参数命名惯例
+
+| 参数名 | 含义 | 出现位置 |
+|--------|------|---------|
+| `v` | 用于比较的值 | `eq(v)`, `gt(v)` |
+| `pat` | 模式/子串 | `starts_with(pat)`, `contains(pat)` |
+| `value` | 元素值 | `contains(value)` |
+| `list` | 值列表 | `one_of(list)` |
+| `condition` | 条件布尔 | 所有 `cond_*` 方法的第一个参数 |
+| `f` / `extractor` | 闭包 | `filter(f)`, `route_to(extractor)` |
+| `min`, `max` | 范围边界 | `in_open_range(min, max)` |
+| `key` | 键 | `keyof(key)`, `contains_key(key)` |
+| `index` | 索引 | `indexof(index)` |
+
+### 方法实现模板
+
+#### 过滤方法实现模式
+```rust
+pub fn {name}(&self, ...) -> Self {
+	if let Some(cursor) = self.cursor
+		&& !{predicate}(cursor, ...)
+	{
+		self.unmatch()
+	} else {
+		self.snapshot()
+	}
+}
+```
+
+#### 条件过滤方法实现模式
+```rust
+pub fn cond_{name}(&self, condition: bool, ...) -> Self {
+	if condition {
+		self.{name}(...)
+	} else {
+		self.snapshot()
+	}
+}
+```
+
+#### 路由方法实现模式
+```rust
+pub fn {name}(&self, ...) -> Selector<'a, Child, Self> {
+	self.route_to(|cursor, _| {extract_child(cursor, ...)})
+}
+```
