@@ -1,6 +1,7 @@
 use crate::error::{SelectorNotMatched, SelectorResult};
 use crate::traits::*;
 
+pub mod hash_map;
 pub mod number;
 pub mod option;
 pub mod ptr;
