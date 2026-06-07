@@ -1,13 +1,19 @@
 [package]
 name = "tynavi"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 authors = ["Ecamika <index@ecamika.dev>"]
 license = "MIT"
 description = "An immutable selector library for navigating, filtering, and backtracking through deeply nested Rust data structures."
 
 [dependencies]
+serde_json = { version = "1.0.150", optional = true }
 tynavi-macros = { version = "0.1.0", path = "macros", optional = true }
 
 [features]
 derive = ["dep:tynavi-macros"]
+serde_json = ["dep:serde_json"]
+
+full = ["derive", "serde_json"]
+
+default = ["full"]
