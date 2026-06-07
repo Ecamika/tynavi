@@ -39,15 +39,7 @@ impl<'a, K, V, P: SelectorInstance> Selector<'a, HashMap<K, V>, P> {
 		}
 	}
 
-	pub fn keyof<Q>(&self, key: &Q) -> Selector<'a, K, Self>
-	where
-		K: Borrow<Q> + Eq + Hash,
-		Q: Eq + Hash + ?Sized,
-	{
-		self.route_to(|cursor, _| cursor.get_key_value(key).map(|(key, _)| key))
-	}
-
-	pub fn get<Q>(&self, key: &Q) -> Selector<'a, V, Self>
+	pub fn keyof<Q>(&self, key: &Q) -> Selector<'a, V, Self>
 	where
 		K: Borrow<Q> + Eq + Hash,
 		Q: Eq + Hash + ?Sized,
@@ -123,54 +115,6 @@ impl<'a, K, V, P: SelectorInstance> Selector<'a, HashMap<K, V>, P> {
 		V: PartialEq,
 	{
 		self.filter(|cursor, _| cursor.values().all(|data| data != value))
-	}
-
-	pub fn cond_keyof<Q>(&self, condition: bool, key: &Q) -> Selector<'a, K, Self>
-	where
-		K: Borrow<Q> + Eq + Hash,
-		Q: Eq + Hash + ?Sized,
-	{
-		if condition {
-			self.keyof(key)
-		} else {
-			Selector::<'a, K, Self>::with(None, self.snapshot())
-		}
-	}
-
-	pub fn cond_get<Q>(&self, condition: bool, key: &Q) -> Selector<'a, V, Self>
-	where
-		K: Borrow<Q> + Eq + Hash,
-		Q: Eq + Hash + ?Sized,
-	{
-		if condition {
-			self.get(key)
-		} else {
-			Selector::<'a, V, Self>::with(None, self.snapshot())
-		}
-	}
-
-	pub fn cond_find_key(
-		&self,
-		condition: bool,
-		f: impl FnMut(&'a K, &'a V, &Self) -> bool,
-	) -> Selector<'a, K, Self> {
-		if condition {
-			self.find_key(f)
-		} else {
-			Selector::<'a, K, Self>::with(None, self.snapshot())
-		}
-	}
-
-	pub fn cond_find(
-		&self,
-		condition: bool,
-		f: impl FnMut(&'a K, &'a V, &Self) -> bool,
-	) -> Selector<'a, V, Self> {
-		if condition {
-			self.find(f)
-		} else {
-			Selector::<'a, V, Self>::with(None, self.snapshot())
-		}
 	}
 
 	pub fn cond_any(&self, condition: bool, f: impl FnMut(&'a K, &'a V, &Self) -> bool) -> Self {
