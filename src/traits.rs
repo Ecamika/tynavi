@@ -4,7 +4,7 @@ pub trait Snapshot {
 	fn snapshot(&self) -> Self;
 }
 
-pub trait AsSelector<'a, C, P: SelectorInstance> {
+pub trait AsSelector<'a, C: ?Sized, P: SelectorInstance> {
 	fn as_selector(&'a self) -> Selector<'a, C, P>;
 }
 

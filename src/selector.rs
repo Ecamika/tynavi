@@ -11,28 +11,28 @@ pub mod string;
 pub mod traits;
 pub mod vec;
 
-pub struct Selector<'a, Current, Parent: SelectorInstance> {
+pub struct Selector<'a, Current: ?Sized, Parent: SelectorInstance> {
 	/// 游标
 	pub cursor: Option<&'a Current>,
 	/// 父节点
 	pub parent: Parent,
 }
 
-impl<'a, Current, Parent: SelectorInstance> Copy for Selector<'a, Current, Parent> {}
+impl<'a, Current: ?Sized, Parent: SelectorInstance> Copy for Selector<'a, Current, Parent> {}
 
-impl<'a, Current, Parent: SelectorInstance> Clone for Selector<'a, Current, Parent> {
+impl<'a, Current: ?Sized, Parent: SelectorInstance> Clone for Selector<'a, Current, Parent> {
 	fn clone(&self) -> Self {
 		*self
 	}
 }
 
-impl<'a, C, P: SelectorInstance> Snapshot for Selector<'a, C, P> {
+impl<'a, C: ?Sized, P: SelectorInstance> Snapshot for Selector<'a, C, P> {
 	fn snapshot(&self) -> Self {
 		*self
 	}
 }
 
-impl<'a, C, P: SelectorInstance> Unmatch for Selector<'a, C, P> {
+impl<'a, C: ?Sized, P: SelectorInstance> Unmatch for Selector<'a, C, P> {
 	fn unmatch(&self) -> Self {
 		self.same_parent(None)
 	}
@@ -46,8 +46,11 @@ impl<'a, C, P: SelectorInstance> Unmatch for Selector<'a, C, P> {
 	}
 }
 
-impl<'b, A, B: SelectorInstance> Selector<'b, A, B> {
-	pub fn with<'a, C, P: SelectorInstance>(cursor: Option<&'a C>, parent: P) -> Selector<'a, C, P> {
+impl<'b, A: ?Sized, B: SelectorInstance> Selector<'b, A, B> {
+	pub fn with<'a, C: ?Sized, P: SelectorInstance>(
+		cursor: Option<&'a C>,
+		parent: P,
+	) -> Selector<'a, C, P> {
 		Selector { cursor, parent }
 	}
 
@@ -55,13 +58,13 @@ impl<'b, A, B: SelectorInstance> Selector<'b, A, B> {
 		Self::with(Some(current), ())
 	}
 
-	pub fn same_parent<C>(&self, cursor: Option<&'b C>) -> Selector<'b, C, B> {
+	pub fn same_parent<C: ?Sized>(&self, cursor: Option<&'b C>) -> Selector<'b, C, B> {
 		Self::with(cursor, self.parent.snapshot())
 	}
 }
 
-impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
-	pub fn route_to<R>(
+impl<'a, C: ?Sized, P: SelectorInstance> Selector<'a, C, P> {
+	pub fn route_to<R: ?Sized>(
 		&self,
 		extractor: impl FnOnce(&'a C, &Self) -> Option<&'a R>,
 	) -> Selector<'a, R, Self> {
@@ -84,7 +87,7 @@ impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
 	}
 }
 
-impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
+impl<'a, C: ?Sized, P: SelectorInstance> Selector<'a, C, P> {
 	pub fn replace<T>(&self, v: &'a T) -> Selector<'a, T, P> {
 		self.same_parent(Some(v))
 	}
@@ -142,7 +145,7 @@ impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
 	}
 }
 
-impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
+impl<'a, C: ?Sized, P: SelectorInstance> Selector<'a, C, P> {
 	pub fn select(&self) -> Option<&'a C> {
 		self.cursor
 	}
@@ -248,7 +251,7 @@ impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
 	}
 }
 
-impl<'a, C, P: SelectorInstance> Selector<'a, C, P> {
+impl<'a, C: ?Sized, P: SelectorInstance> Selector<'a, C, P> {
 	pub fn or_a_parent_a<T: SelectorInstance>(&self, selb: Selector<'a, C, T>) -> Selector<'a, C, P> {
 		let a_cursor = self.cursor;
 		let b_cursor = selb.cursor;
