@@ -1,24 +1,31 @@
 # tynavi
 
-`tynavi`（全称 `Type Navigator`）是一个零依赖的 Rust Selector 模式库，专注于两件事：
+`tynavi`（全称 `Type Navigator`）是一个面向深层数据导航场景的 Rust Selector 模式库。
 
-- 用不可变、可链式的方式在数据结构中导航
-- 在选择子链路中保留父节点快照，支持回溯
+它从 `onebot-api` 的 `selector` 设计中演化而来，但在这里被拆成了更通用的独立实现：支持不可变链式调用、父节点回溯、标准库容器扩展，以及可选的 derive / attribute 宏自动生成能力。
 
-它来自 [`onebot-api`](https://github.com/Ecamika/onebot-api) 的 `selector` feature（1.2.0 ~ 1.2.5），但被重构为一个更通用独立库
+## 当前状态
 
-## 特性
+- 当前 crate 版本：`0.1.2`
+- Rust edition：`2024`
+- 最低工具链要求：`>= 1.85`
+- 主 crate 默认启用 `full` feature
+- `default-features = false` 时可退回仅标准库核心能力
 
-- 零外部依赖
-- Rust `edition = "2024"`
-- 要求工具链 `>= 1.85`
-- `Selector<'a, Current, Parent>` 同时追踪当前节点和父节点
-- 所有过滤 API 返回 `Self`，适合不可变链式调用
-- 支持 `backtrack()` / `up()` 回到父节点
-- 内置数字、字符串和智能指针类型扩展
-- 提供同步与异步过滤/提取接口
+需要特别注意的是：
 
-## 设计概念
+- 核心 Selector API 本身不依赖第三方运行时库
+- 但仓库当前已经包含可选生态扩展依赖与 `tynavi-macros` 过程宏子 crate
+- 因为默认 feature 是 `full`，直接引入 `tynavi` 时并不是“默认零依赖扩展面”
+
+如果你想只使用最小核心能力，建议这样声明：
+
+```toml
+[dependencies]
+tynavi = { version = "0.1.2", default-features = false }
+```
+
+## 核心设计
 
 核心类型：
 
@@ -30,40 +37,18 @@ Selector<'a, Current, Parent>
 - `Parent`：父节点快照类型
 - `cursor: Option<&'a Current>`：当前是否匹配
 
-和常见的可变 Selector 设计不同，`tynavi` 的方法不会原地修改自身，而是返回新的快照，这使得链式调用更稳定，也让“当前节点”和“父节点”可以安全一起传递
+与 `onebot-api` 早期可变 Selector 不同，`tynavi` 采用不可变快照语义：
 
-## 这个库解决什么问题
+- 过滤方法返回新的 `Self`
+- 路由方法返回 `Selector<'a, Child, Self>`
+- 父节点快照可通过 `backtrack()` / `up()` 安全返回
 
-`tynavi` 最初来自 `onebot-api` 的事件处理场景（1.2.0 ~ 1.2.5），它主要解决的不是“完全替代模式匹配”，而是替代那些在深层嵌套事件结构中，为了取字段、筛选条件和保留上下文而产生的大量样板 `match`
+这使它很适合表达一类固定问题：
 
-它尤其适合下面几类问题：
-
-- 深层嵌套枚举或结构体访问过于冗长
-- 事件处理中“先取值、再判断、再继续下钻”的流程分散在多层 `match + if` 中
-- 中间任意一步不匹配时，需要反复手写失败分支
-- 深入某个子字段检查后，还需要回到父事件继续处理
-- 相似的事件筛选逻辑难以沉淀成可复用的小段能力
-
-换句话说，`tynavi` 更擅长表达：
-
-- 我要进入哪个字段
-- 我要对当前值施加什么条件
-- 匹配成功后我要提取什么
-- 必要时我要回到哪一层上下文
-
-在这种场景下，链式 Selector 往往比直接展开多层模式匹配更接近业务意图
-
-## 不打算解决什么问题
-
-`tynavi` 也有明确边界，它并不适合替代所有 `match`：
-
-- 当逻辑本身是复杂分支控制流时，`match` 通常更直接
-- 当你需要穷尽枚举分支并显式处理每一种情况时，模式匹配更清晰
-- 当导航路径本身不稳定、需要大量自定义提取器时，链式调用的可读性未必比手写控制流更好
-
-因此更准确的定位是：
-
-`tynavi` 用来处理“深层数据导航 + 条件筛选 + 结果提取 + 父上下文回退”这类问题，而不是用来取代 Rust 里所有的模式匹配
+- 从嵌套结构中持续下钻
+- 在链路中逐步过滤
+- 某一步失败后自动进入未匹配态
+- 需要在深入检查后回到上层上下文继续处理
 
 ## 快速开始
 
@@ -99,142 +84,218 @@ let user = User {
 
 let city = user
 	.as_selector()
-	.route_to(|u| Some(&u.profile))
-	.route_to(|p| Some(&p.city))
+	.route_to(|u, _| Some(&u.profile))
+	.route_to(|p, _| Some(&p.city))
 	.starts_with("Hang")
-	.extract(|city| city.to_owned());
+	.extract(|city, _| city.to_owned());
 
 assert_eq!(city, Some("Hangzhou".to_owned()));
 
-let age_ok = user
+let adult = user
 	.as_selector()
-	.route_to(|u| Some(&u.profile))
-	.route_to(|p| Some(&p.age))
+	.route_to(|u, _| Some(&u.profile))
+	.route_to(|p, _| Some(&p.age))
 	.ge(&18)
 	.is_matched();
 
-assert!(age_ok);
+assert!(adult);
 ```
 
 ## 父节点回溯
 
-`tynavi` 的一个关键能力是父节点追踪
-
 ```rust
-let profile_selector = user
-	.as_selector()
-	.route_to(|u| Some(&u.profile));
+let profile = user.as_selector().route_to(|u, _| Some(&u.profile));
 
-let city_selector = profile_selector
-	.route_to(|p| Some(&p.city))
+let city = profile
+	.route_to(|p, _| Some(&p.city))
 	.contains("zhou");
 
-let parent = city_selector.backtrack();
-assert!(parent.select().is_some());
+assert!(city.is_matched());
+assert!(city.backtrack().select().is_some());
+assert!(city.up().select().is_some());
 ```
 
 - `backtrack()`：直接返回父节点快照
-- `up()`：回到父节点，并在当前未匹配时把未匹配状态向上传递
+- `up()`：返回父节点，并在当前未匹配时把未匹配状态向上传递
 
-这让“先深入筛选，再回到上层继续处理”成为可能
+## 已实现的核心 API
 
-## 核心 API
+### 通用构造 / 路由 / 处理
 
-### 路由与转换
+- `new`
+- `with`
+- `same_parent`
+- `route_to`
+- `replace`
+- `map`
+- `select`
+- `extract` / `cond_extract`
+- `extract_async` / `cond_extract_async`
+- `inspect` / `inspect_cursor`
+- `filter` / `cond_filter`
+- `filter_async` / `cond_filter_async`
+- `require_matched`
+- `parent`
+- `backtrack`
+- `up`
+- `or_a_parent_a` / `or_a_parent_b` / `or_b_parent_a` / `or_b_parent_b`
 
-- `route_to(extractor)`：进入子字段，父节点变为当前快照
-- `replace(v)`：替换当前游标
-- `map(f)`：将当前引用映射到另一引用
+### 标准库类型扩展
 
-### 过滤
+当前已内置以下常见类型支持：
 
-- `filter(f)`
-- `cond_filter(condition, f)`
-- `filter_async(f)`
-- `cond_filter_async(condition, f)`
+- 数值类型：`i8` `i16` `i32` `i64` `i128` `isize` `u8` `u16` `u32` `u64` `u128` `usize` `f32` `f64`
+- 字符串类型：`&str`、`str`、`String`
+- 容器与指针：`Option<T>`、`Result<T, E>`、`HashMap<K, V>`、`&[T]`、`Box<T>`、`Rc<T>`、`Arc<T>`
 
-约定：
+其中已实现的典型能力包括：
 
-- 当 `condition == false` 时，所有 `cond_*` 方法都直接返回 `snapshot()`
-- 过滤失败后，Selector 会进入未匹配状态
+- 数值比较：`eq`、`not_eq`、`gt`、`lt`、`ge`、`le` 及其 `cond_*`
+- 字符串过滤：`starts_with`、`ends_with`、`contains`、`contains_char`、`empty`
+- 切片导航：`first`、`last`、`indexof`、`find`、`any`、`all`、`none`
+- `HashMap` 导航：`keyof`、`find_key`、`find`、`contains_key`、`contains_value`
+- `Option` 路由：`flatten`
+- `Result` 路由：`ok`、`err`
+- 智能指针解引用：`as_ref`
 
-### 提取与检查
+## 生态扩展
 
-- `select()`：返回 `Option<&Current>`
-- `extract(f)`：提取值，返回 `Option<R>`
-- `extract_async(f)`：异步提取
-- `is_matched()`：检查当前是否匹配
-- `require_matched()`：返回 `SelectorResult<Self>`
+当前通过 feature 提供以下扩展：
 
-### 回溯
+- `http`
+- `axum`
+- `tungstenite`
+- `serde_json`
+- `reqwest`
+- `derive`
 
-- `parent()`：获取父节点快照
-- `backtrack()`：返回父节点
-- `up()`：向上返回，并传播未匹配状态
+`full` 会一次性启用：
 
-## 已内置的类型扩展
-
-### 数字类型
-
-已支持：
-
-- `i8` `i16` `i32` `i64` `i128` `isize`
-- `u8` `u16` `u32` `u64` `u128` `usize`
-
-每个数字类型都提供：
-
-- `eq` / `not_eq`
-- `gt` / `not_gt`
-- `lt` / `not_lt`
-- `ge` / `not_ge`
-- `le` / `not_le`
-- 对应的全部 `cond_*` 变体
-
-### 字符串类型
-
-已支持：
-
-- `&str`
-- `String`
-
-提供：
-
-- `starts_with`
-- `ends_with`
-- `contains`
-- 对应的全部 `cond_*` 变体
-
-### 智能指针类型
-
-已支持：
-
-- `Box<T>`
-- `Rc<T>`
-- `Arc<T>`
-
-提供：
-
-- `as_ref()`：将 `Selector<Box<T>, _>`、`Selector<Rc<T>, _>`、`Selector<Arc<T>, _>` 路由到 `Selector<T, _>`
-
-## 为自定义类型接入
-
-接入一个自定义根类型时，通常只需要实现 `AsSelector`：
-
-```rust
-use tynavi::{selector::Selector, traits::AsSelector};
-
-struct Event {
-	id: u64,
-}
-
-impl<'a> AsSelector<'a, Event, ()> for Event {
-	fn as_selector(&'a self) -> Selector<'a, Event, ()> {
-		Selector::new(self)
-	}
-}
+```toml
+["derive", "serde_json", "tungstenite", "http", "axum", "reqwest"]
 ```
 
-如果你希望某个字段也拥有更自然的导航入口，可以继续围绕 `Selector<'a, T, P>` 为该类型扩展方法
+如果只想启用某一类扩展，可以关闭默认 feature 再手动选择：
+
+```toml
+[dependencies]
+tynavi = { version = "0.1.2", default-features = false, features = ["reqwest"] }
+```
+
+### `reqwest` 示例
+
+```rust
+use http::Response as HttpResponse;
+use reqwest::{Method, Request, Response, ResponseBuilderExt, Url};
+use tynavi::traits::AsSelector;
+
+let mut req = Request::new(
+	Method::POST,
+	Url::parse("https://api.example.com:8443/v1/users?active=true").unwrap(),
+);
+req.headers_mut().insert("x-token", "secret".parse().unwrap());
+*req.body_mut() = Some("payload".into());
+
+assert!(
+	req
+		.as_selector()
+		.url()
+		.path()
+		.starts_with("/v1/")
+		.is_matched()
+);
+
+assert!(req.as_selector().body().starts_with(b"pay").is_matched());
+
+let res = Response::from(
+	HttpResponse::builder()
+		.status(201)
+		.url(Url::parse("https://api.example.com/v1/users/42").unwrap())
+		.body("hello")
+		.unwrap(),
+);
+
+assert!(res.as_selector().is_success().is_matched());
+assert!(res.as_selector().content_length_eq(5).is_matched());
+```
+
+### `serde_json` 示例
+
+```rust
+use serde_json::json;
+use tynavi::traits::AsSelector;
+
+let value = json!({
+	"users": [
+		{ "name": "alice" }
+	]
+});
+
+assert!(
+	value
+		.as_selector()
+		.keyof("users")
+		.first()
+		.keyof("name")
+		.as_str()
+		.contains("alice")
+		.is_matched()
+);
+```
+
+## 宏支持
+
+仓库当前已经提供 `tynavi-macros` 子 crate，并通过主 crate 的 `derive` feature 暴露两类宏：
+
+- `#[derive(Selector)]`
+- `#[selector]`
+
+它们适合把结构体 / 枚举上的手写导航方法批量生成出来，尤其适用于事件模型或较大的领域对象。
+
+```toml
+[dependencies]
+tynavi = { version = "0.1.2", default-features = false, features = ["derive"] }
+```
+
+使用示例：
+
+```rust
+use tynavi::{Selector, selector};
+use tynavi::traits::AsSelector;
+
+#[derive(Selector)]
+struct Message {
+	text: String,
+}
+
+#[selector]
+enum Event {
+	Message(Message),
+}
+
+let event = Event::Message(Message {
+	text: "hello".to_string(),
+});
+
+assert!(event
+	.as_selector()
+	.route_message()
+	.route_text()
+	.contains("hello")
+	.is_matched());
+```
+
+更完整的宏说明见 `macros/docs/selector.md`。
+
+## 与 onebot-api Selector 的差异
+
+| 特性 | onebot-api 旧版 selector | tynavi |
+|------|--------------------------|--------|
+| 类型签名 | `Selector<'a, T>` | `Selector<'a, Current, Parent>` |
+| 可变性 | `&mut self` 风格 | 不可变快照，过滤返回 `Self` |
+| 父节点追踪 | 无 | 有，支持 `backtrack()` / `up()` |
+| 生成方式 | 主要依赖宏生成 | 可手写扩展，也支持 `derive` / `selector` 宏 |
+| 适用范围 | onebot-api 事件模型 | 任意 Rust 类型与若干生态对象 |
 
 ## 构建与测试
 
@@ -246,23 +307,4 @@ cargo fmt
 cargo test
 ```
 
-项目使用 `.rustfmt.toml`，采用硬制表符格式
-
-## 与 onebot-api Selector 的区别
-
-| 特性 | onebot-api（1.2.0 ~ 1.2.5） | tynavi |
-|------|-----------|--------|
-| 类型签名 | `Selector<'a, T>` | `Selector<'a, Current, Parent>` |
-| 可变性 | `&mut self` 风格 | 返回 `Self` 的不可变快照 |
-| 父节点追踪 | 无 | 有 |
-| 使用范围 | onebot-api 事件模型 | 任意 Rust 类型 |
-
-## 当前状态
-
-这个库目前已经具备可用的基础 Selector 能力，适合：
-
-- 在嵌套结构中做只读导航与筛选
-- 需要保留父节点上下文的链式查询
-- 希望避免宏和外部依赖的轻量场景
-
-如果后续继续扩展，比较自然的方向包括更多标准库类型支持，以及为业务模型补充更贴近领域的导航方法
+项目使用 `.rustfmt.toml`，采用硬制表符格式。

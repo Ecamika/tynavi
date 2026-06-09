@@ -4,7 +4,9 @@
 - **tynavi**（全称 **type navigator**）是从 onebot-api 的 `selector` feature 中提取并重新设计的通用 **Selector** 模式库。
 - 不是 workspace，单 crate 结构。
 - Rust **edition 2024**，要求工具链 >= 1.85。
-- 零外部依赖。
+- 主 crate 默认启用 `full` feature，按需集成 `serde_json`、`tungstenite`、`http`、`axum`、`reqwest` 与 `derive` 宏支持。
+- 核心 Selector API 可在 `default-features = false` 下以最小依赖使用，但仓库当前并非“只有标准库源码”的纯零依赖状态。
+- 仓库包含 `macros/` 过程宏子 crate，用于提供 `#[derive(Selector)]` 与 `#[selector]`。
 
 ## 构建 / 检查 / 测试
 ```bash
@@ -47,24 +49,30 @@ cargo test       # 运行单元测试
 | 类型签名 | `Selector<'a, T>` | `Selector<'a, Current, Parent>` |
 | 可变性 | `&mut self` | 返回 `Self`（不可变） |
 | 父节点追踪 | 无 | 有（支持 `backtrack()` / `up()`） |
-| 生成方式 | `#[derive(Selector)]` 宏 | 手动 impl |
-| 比较操作 | 仅基础 `eq/gt/lt/ge/le` | 完整 + `not_*` + `cond_*` 变体 |
+| 生成方式 | `#[derive(Selector)]` 宏 | 同时支持手动 impl 与 `derive` / `selector` 宏 |
+| 比较操作 | 仅基础 `eq/gt/lt/ge/le` | 完整 + `not_*` + `cond_*`，并覆盖整数、无符号整数与浮点数 |
 
 ### 核心方法
 - `route_to(extractor)` — 通过提取器路由到子类型
 - `replace(v)` / `map(f)` — 替换或映射当前游标
 - `filter(f)` / `cond_filter(cond, f)` / `filter_async(f)` — 过滤（含条件与异步变体）
-- `extract(f)` / `extract_async(f)` — 提取值
+- `extract(f)` / `cond_extract(cond, f)` / `extract_async(f)` — 提取值
+- `inspect(f)` / `inspect_cursor(f)` — 检查当前匹配态或游标并返回原快照
 - `select()` — 获取 `Option<&Current>`
-- `is_matched()` — 是否匹配
+- `is_matched()` / `require_matched()` — 是否匹配 / 转为 `Result`
 - `backtrack()` / `up()` — 返回父节点
+- `or_a_parent_a()` 等 `or_*` 组合方法 — 合并两个 Selector 的游标并选择保留哪一侧 parent
 
 ### 已实现类型扩展
-- **数字类型**：`i8`/`i16`/`i32`/`i64`/`i128`/`isize`、`u8`/`u16`/`u32`/`u64`/`u128`/`usize`
+- **数字类型**：`i8`/`i16`/`i32`/`i64`/`i128`/`isize`、`u8`/`u16`/`u32`/`u64`/`u128`/`usize`、`f32`/`f64`
   - 每个都有：`eq`, `not_eq`, `gt`, `not_gt`, `lt`, `not_lt`, `ge`, `not_ge`, `le`, `not_le`
   - 每个都有条件变体：`cond_*`
-- **字符串类型**：`&str`, `String`
-  - `starts_with`, `ends_with`, `contains` 及条件变体
+- **字符串类型**：`&str`, `str`, `String`
+  - `starts_with`, `ends_with`, `contains`, `contains_char`, `empty` 及条件变体
+- **标准库容器/指针**：`Option<T>`、`Result<T, E>`、`HashMap<K, V>`、`&[T]`、`Box<T>`、`Rc<T>`、`Arc<T>`
+  - `flatten`、`ok`/`err`、`keyof`、`first`/`last`/`indexof`、`as_ref` 等路由能力
+- **生态扩展**：`http`、`axum`、`tungstenite`、`serde_json`、`reqwest`
+  - 由 feature 控制，默认 `full` 会全部启用
 
 ## 关键约定
 - `()` 实现了 `Snapshot` + `Unmatch`，作为根父节点使用。
@@ -74,7 +82,7 @@ cargo test       # 运行单元测试
 ## 与 onebot-api 的关系
 - tynavi 的 Selector 是 onebot-api `selector` feature 的**通用化重构**。
 - onebot-api 使用 proc-macro（`onebot-api-macros`）为事件类型自动生成 Selector 方法。
-- tynavi 移除了宏依赖，改为手动实现，使库更轻量、适用于任意类型。
+- tynavi 将核心库与宏 crate 分离：可手动实现以保持最小依赖，也可启用 `derive` 复用自动生成能力。
 
 ## Changelog rule
 
